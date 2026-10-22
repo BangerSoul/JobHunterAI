@@ -16,8 +16,8 @@ class ActorMetadata(BaseModel):
 
 # Canonical catalog of Apify actors supported by JobHunterAI
 APIFY_ACTOR_CATALOG: Dict[str, ActorMetadata] = {
-    "apify/google-jobs-scraper": ActorMetadata(
-        id="apify/google-jobs-scraper",
+    "johnvc/Google-Jobs-Scraper": ActorMetadata(
+        id="johnvc/Google-Jobs-Scraper",
         name="Google Jobs Scraper",
         supported_sources=["Google Jobs"],
         supported_countries=["global"],

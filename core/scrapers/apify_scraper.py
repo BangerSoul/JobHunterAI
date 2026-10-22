@@ -7,6 +7,82 @@ from apify_client import ApifyClientAsync
 
 logger = logging.getLogger(__name__)
 
+
+def build_actor_run_input(
+    actor_id: str, search_query: str, location: str, limit: int
+) -> dict:
+    """Build Actor input. The johnvc Google Jobs Actor uses query, not queries."""
+    actor_key = (actor_id or "").lower()
+    if "google-jobs-scraper" in actor_key:
+        return {
+            "query": search_query,
+            "location": location or "",
+            "num_results": limit,
+            "max_pagination": 1,
+        }
+    if "google-jobs" in (actor_id or ""):
+        return {
+            "queries": f"{search_query} in {location}",
+            "maxPagesPerQuery": 1,
+            "maxResultsPerQuery": limit,
+        }
+    if "linkedin-jobs" in (actor_id or ""):
+        return {
+            "queries": f"{search_query} {location}",
+            "limit": limit,
+        }
+    if "indeed" in (actor_id or ""):
+        return {
+            "position": search_query,
+            "location": location,
+            "maxItems": limit,
+        }
+    return {"queries": search_query, "limit": limit}
+
+
+def map_actor_item(item: dict, fallback_location: str, source_id: str, job_type: str) -> dict:
+    """Read the fields this fleet already stores, with johnvc names as fallbacks."""
+    options = item.get("apply_options")
+    apply_link = ""
+    if isinstance(options, list) and options and isinstance(options[0], dict):
+        apply_link = options[0].get("link") or ""
+    title = item.get("title") or item.get("job_title") or item.get("positionName") or "Role"
+    company = (
+        item.get("companyName")
+        or item.get("company")
+        or item.get("company_name")
+        or "Company"
+    )
+    loc = item.get("location") or item.get("city", fallback_location)
+    job_url = (
+        item.get("url")
+        or item.get("link")
+        or item.get("jobUrl")
+        or apply_link
+        or item.get("share_link")
+        or "#"
+    )
+    raw_id = str(
+        item.get("id")
+        or item.get("jobId")
+        or item.get("job_id")
+        or f"{source_id}-{random.randint(1000, 9999)}"
+    )
+    desc = item.get("description") or item.get("descriptionText") or "View listing for details."
+    return {
+        "job_id_raw": raw_id,
+        "title": title.strip(),
+        "company_name": company.strip(),
+        "location": str(loc),
+        "work_place_type": "Onsite",
+        "job_type": job_type,
+        "source": f"apify:{source_id}",
+        "url": job_url,
+        "description_raw": str(desc),
+        "description_clean": str(desc)[:300],
+    }
+
+
 from core.config.settings import settings
 from core.schemas.job_listing import JobListingCreate
 from core.scrapers.base import BaseScraper
@@ -21,7 +97,7 @@ class ApifyJobScraper(BaseScraper):
         self.config = actor_config or {
             "id": "google_jobs",
             "name": "Apify Cloud",
-            "actor_id": "toolsnmoreapi/google-jobs",
+            "actor_id": "johnvc/Google-Jobs-Scraper",
         }
 
     @property
@@ -35,7 +111,7 @@ class ApifyJobScraper(BaseScraper):
         limit: int = 10,
         job_type: str = "Full-Time",
     ) -> List[JobListingCreate]:
-        log = logger.bind(scraper=self.name)
+        log = logger
         from core.providers.apify.registry import registry as apify_registry
 
         token = settings.APIFY_API_TOKEN.strip() if settings.APIFY_API_TOKEN else ""
@@ -49,26 +125,7 @@ class ApifyJobScraper(BaseScraper):
         client = ApifyClientAsync(token=token)
 
         # 1. Determine specialized input based on actor ID
-        if "google-jobs" in actor_id:
-            run_input = {
-                "queries": f"{search_query} in {target_location}",
-                "maxPagesPerQuery": 1,
-                "maxResultsPerQuery": limit
-            }
-        elif "linkedin-jobs" in actor_id:
-            run_input = {
-                "queries": f"{search_query} {target_location}",
-                "limit": limit
-            }
-        elif "indeed" in actor_id:
-            run_input = {
-                "position": search_query,
-                "location": target_location,
-                "maxItems": limit
-            }
-        else:
-            # Fallback for generic scrapers
-            run_input = {"queries": search_query, "limit": limit}
+        run_input = build_actor_run_input(actor_id, search_query, target_location, limit)
 
         try:
             log.info(f"Invoking {self.name} ({actor_id})")
@@ -92,26 +149,14 @@ class ApifyJobScraper(BaseScraper):
             jobs = []
             for item in raw_items[:limit]:
                 try:
-                    # Multi-schema mapping
-                    title = item.get("title") or item.get("positionName") or "Role"
-                    company = item.get("companyName") or item.get("company") or "Company"
-                    loc = item.get("location") or item.get("city", target_location)
-                    job_url = item.get("url") or item.get("link") or item.get("jobUrl", "#")
-                    raw_id = str(item.get("id") or item.get("jobId") or f"{self.config['id']}-{random.randint(1000, 9999)}")
-                    desc = item.get("description") or item.get("descriptionText", "View listing for details.")
-
                     jobs.append(
                         JobListingCreate(
-                            job_id_raw=raw_id,
-                            title=title.strip(),
-                            company_name=company.strip(),
-                            location=str(loc),
-                            work_place_type="Onsite",
-                            job_type=job_type,
-                            source=f"apify:{self.config['id']}",
-                            url=job_url,
-                            description_raw=str(desc),
-                            description_clean=str(desc)[:300],
+                            **map_actor_item(
+                                item,
+                                target_location,
+                                self.config["id"],
+                                job_type,
+                            )
                         )
                     )
                 except:

@@ -20,7 +20,7 @@ scrapers:
 
   - id: google_jobs
     name: Google Jobs Scraper
-    actor_id: "toolsnmoreapi/google-jobs"
+    actor_id: "johnvc/Google-Jobs-Scraper"
     priority: 2
     enabled: true
     timeout_seconds: 90

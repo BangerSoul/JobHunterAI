@@ -9,7 +9,7 @@ class ApifyConfig(BaseModel):
     """Configuration for the Apify scraper provider."""
 
     api_token: Optional[str] = Field(default=None)
-    default_actor_id: str = Field(default="apify/google-jobs-scraper")
+    default_actor_id: str = Field(default="johnvc/Google-Jobs-Scraper")
 
     # Run parameters
     timeout_secs: int = Field(default=300, ge=1)
