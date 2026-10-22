@@ -25,11 +25,21 @@ class DatasetMapper:
                 job_id = str(
                     item.get("id")
                     or item.get("jobId")
+                    or item.get("job_id")
                     or item.get("hash")
                     or f"ext-{datetime.now().timestamp()}"
                 )
+                options = item.get("apply_options")
+                apply_link = ""
+                if isinstance(options, list) and options and isinstance(options[0], dict):
+                    apply_link = options[0].get("link") or ""
                 job_url = (
-                    item.get("link") or item.get("url") or item.get("jobUrl") or "#"
+                    item.get("link")
+                    or item.get("url")
+                    or item.get("jobUrl")
+                    or apply_link
+                    or item.get("share_link")
+                    or "#"
                 )
 
                 # 2. Core Fields (with aggressive fallback)
@@ -42,6 +52,7 @@ class DatasetMapper:
                 company = (
                     item.get("companyName")
                     or item.get("company")
+                    or item.get("company_name")
                     or item.get("employer")
                     or "Confidential"
                 )

@@ -22,7 +22,16 @@ class ApifyRequestMapper:
         """
         Maps generic scrape request to actor-specific JSON schema.
         """
-        if "google-jobs-scraper" in actor_id:
+        actor_key = actor_id.lower()
+        if "google-jobs-scraper" in actor_key and actor_key.startswith("johnvc/"):
+            return {
+                "query": request.query,
+                "location": request.location or "",
+                "num_results": request.limit,
+                "max_pagination": 1,
+            }
+
+        if "google-jobs-scraper" in actor_key:
             return {
                 "queries": f"{request.query} in {request.location}",
                 "maxPagesPerQuery": request.max_pages or (request.limit // 10 + 1),

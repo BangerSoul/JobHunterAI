@@ -8,6 +8,48 @@ from core.config.settings import settings
 logger = logging.getLogger("jobhunterai.scraper")
 
 
+def first_apply_link(job: Dict[str, Any]) -> str:
+    """Return the first apply link on a johnvc Google Jobs row."""
+    options = job.get("apply_options")
+    if isinstance(options, list) and options and isinstance(options[0], dict):
+        link = options[0].get("link")
+        if isinstance(link, str):
+            return link
+    return ""
+
+
+def build_apify_run_input(
+    actor_id: str, query: str, location: str, limit: int
+) -> Dict[str, Any]:
+    """Build Actor input. johnvc Google Jobs is a different schema from the removed Actor."""
+    if "google-jobs-scraper" in actor_id.lower():
+        return {
+            "query": query,
+            "location": location or "",
+            "num_results": limit,
+            "max_pagination": 1,
+        }
+    if "google-jobs" in actor_id:
+        return {"queries": query, "maxPagesPerQuery": 1}
+    return {"queries": query}
+
+
+def normalize_scraped_job(job: Dict[str, Any], source: str) -> Dict[str, Any]:
+    """Map one scraped row onto the fields /scrape already returns."""
+    return {
+        "title": job.get("title") or job.get("job_title") or "Unknown Title",
+        "company_name": job.get("company_name") or job.get("company") or "Unknown Company",
+        "location": job.get("location") or "Remote",
+        "url": job.get("url")
+        or job.get("job_url")
+        or first_apply_link(job)
+        or job.get("share_link")
+        or "#",
+        "source": source,
+        "description_raw": job.get("description") or job.get("description_raw") or "",
+    }
+
+
 from core.providers.apify.registry import registry as apify_registry
 from core.providers.apify.selector import selector as apify_selector
 
@@ -31,12 +73,10 @@ async def apify_scrape(payload: Dict[str, Any]) -> Dict[str, Any]:
         return None
 
     actor_id = actor_meta["actor_id"]
+    limit = int(payload.get("limit") or actor_meta.get("max_results") or 10)
 
     try:
-        if "google-jobs" in actor_id:
-            run_input = {"queries": query, "maxPagesPerQuery": 1}
-        else:
-            run_input = {"queries": query}
+        run_input = build_apify_run_input(actor_id, query, location, limit)
 
         logger.info(f"Dynamic Dispatch -> Apify Actor: {actor_id}")
         run = client.actor(actor_id).call(run_input=run_input)
@@ -149,19 +189,6 @@ async def scrape_jobs(payload: Dict[str, Any]) -> Dict[str, Any]:
     normalized = []
     raw_data = res.get("data", [])
     for job in raw_data:
-        normalized.append(
-            {
-                "title": job.get("title") or job.get("job_title") or "Unknown Title",
-                "company_name": job.get("company_name")
-                or job.get("company")
-                or "Unknown Company",
-                "location": job.get("location") or "Remote",
-                "url": job.get("url") or job.get("job_url") or "#",
-                "source": res.get("source", "unknown"),
-                "description_raw": job.get("description")
-                or job.get("description_raw")
-                or "",
-            }
-        )
+        normalized.append(normalize_scraped_job(job, res.get("source", "unknown")))
 
     return {"source": res.get("source"), "data": normalized}

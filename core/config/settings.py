@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # --- Scraper Configuration ---
     APIFY_ENABLED: bool = True
     APIFY_API_TOKEN: Optional[str] = None
-    APIFY_ACTOR_ID: str = "apify/google-jobs-scraper"
+    APIFY_ACTOR_ID: str = "johnvc/Google-Jobs-Scraper"
     APIFY_MAX_CONCURRENT_RUNS: int = 3
     APIFY_RUN_TIMEOUT_SECONDS: int = 120
     APIFY_HEALTH_CHECK_INTERVAL_MINUTES: int = 60
